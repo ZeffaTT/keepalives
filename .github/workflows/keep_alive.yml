@@ -8,8 +8,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping database
+        env:
+          SUPA_URL: ${{ secrets.CAREER_SUPABASE_URL }}
+          SUPA_KEY: ${{ secrets.CAREER_SUPABASE_KEY }}
         run: |
           curl --fail --silent --show-error \
-            "${{ secrets.CAREER_SUPABASE_URL }}/rest/v1/keepalive?select=id" \
-            -H "apikey: ${{ secrets.CAREER_SUPABASE_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.CAREER_SUPABASE_KEY }}"
+            "$SUPA_URL/rest/v1/keepalive?select=id" \
+            -H "apikey: $SUPA_KEY" \
+            -H "Authorization: Bearer $SUPA_KEY"
