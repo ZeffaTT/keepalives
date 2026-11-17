@@ -1,18 +1,56 @@
 name: Keep Supabase Awake
+
+# Pings the Career Studio Supabase project twice a week so the free tier
+# never pauses it for inactivity (Supabase pauses after ~7 days idle).
+#
+# GitHub disables scheduled workflows in a repo that has had no commits for
+# 60 days. To prevent that, this workflow also commits a small heartbeat file
+# whenever the last commit is more than 30 days old.
+
 on:
   schedule:
-    - cron: "17 9 * * 1,4"
+    - cron: "17 9 * * 1,4"   # Mon & Thu 09:17 UTC (05:17 Trinidad)
   workflow_dispatch:
+
+permissions:
+  contents: write            # needed for the heartbeat commit
+
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping database
+      - name: Ping database (records last_ping)
         env:
           SUPA_URL: ${{ secrets.CAREER_SUPABASE_URL }}
           SUPA_KEY: ${{ secrets.CAREER_SUPABASE_KEY }}
         run: |
-          curl --fail --silent --show-error \
-            "$SUPA_URL/rest/v1/keepalive?select=id" \
+          curl --fail --silent --show-error --retry 3 --retry-delay 20 \
+            -X POST "$SUPA_URL/rest/v1/rpc/ping_keepalive" \
             -H "apikey: $SUPA_KEY" \
-            -H "Authorization: Bearer $SUPA_KEY"
+            -H "Authorization: Bearer $SUPA_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+          echo
+          echo "Ping OK"
+
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Heartbeat commit (stops GitHub's 60-day auto-disable)
+        run: |
+          last=$(git log -1 --format=%ct)
+          now=$(date +%s)
+          age_days=$(( (now - last) / 86400 ))
+          echo "Last commit was $age_days day(s) ago"
+          if [ "$age_days" -ge 30 ]; then
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > heartbeat.txt
+            git config user.name  "keepalive-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add heartbeat.txt
+            git commit -m "chore: keep-alive heartbeat"
+            git push
+          else
+            echo "Recent activity — no heartbeat needed"
+          fi
